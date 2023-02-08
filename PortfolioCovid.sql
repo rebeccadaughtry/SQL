@@ -1,0 +1,121 @@
+--Covid 19 Data Exploration
+--Joins, CTEs, Temp Tables, Windows Functions, Aggregate Functions, Creating Views, Converting Data Types
+
+SELECT *
+FROM Portfolio..CovidDeaths
+WHERE continent IS NOT NULL
+ORDER BY location, date
+
+--Selecting data we will be starting with
+
+SELECT location, date, total_cases, new_cases, total_deaths, population
+FROM Portfolio..CovidDeaths
+WHERE continent IS NOT NULL
+ORDER BY location, date
+
+--Total cases vs total deaths
+--Shows likelihood of dying after contracting Covid
+
+SELECT location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 AS DeathPercentage
+FROM Portfolio..CovidDeaths
+WHERE location = 'United States'
+ORDER BY location, date
+
+--Total cases vs population
+--Shows what percentage of population got Covid
+
+SELECT location, date, population, total_cases, (total_cases/population)*100 AS PercentInfected
+FROM Portfolio..CovidDeaths
+--WHERE location = 'United States'
+ORDER BY location, date
+
+--Countries with highest infection rate compared to population
+
+SELECT location, population, MAX(total_cases) AS HighestInfectionCount, MAX((total_cases/population))*100 AS PercentInfected
+FROM Portfolio..CovidDeaths
+--WHERE location = 'United States'
+GROUP BY location, population
+ORDER BY PercentInfected DESC
+
+--Showing countries with highest death count per population
+
+SELECT location, MAX(CAST(total_deaths AS INT)) AS TotalDeathCount
+FROM Portfolio..CovidDeaths
+WHERE continent IS NOT NULL
+GROUP BY location
+ORDER BY TotalDeathCount DESC
+
+--Showing continents with highest death count per population
+
+SELECT continent, MAX(CAST(total_deaths AS INT)) AS TotalDeathCount
+FROM Portfolio..CovidDeaths
+WHERE continent IS NOT NULL
+GROUP BY continent
+ORDER BY TotalDeathCount DESC
+
+--Global numbers
+
+SELECT SUM(new_cases) AS total_cases, SUM(CAST(new_deaths AS int)) AS total_deaths,
+SUM(CAST(new_deaths AS int))/SUM(new_cases)*100 AS DeathPercentage
+FROM Portfolio..CovidDeaths
+WHERE continent IS NOT NULL
+
+--Looking at total population vs vaccinations
+--Percentage of population that has recieved covid vaccine
+
+SELECT dea.continent, dea.location, dea.date, dea.population, vax.new_vaccinations,
+SUM(CONVERT(bigint,vax.new_vaccinations)) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaxxed
+FROM Portfolio..CovidDeaths dea
+JOIN Portfolio..CovidVax vax
+	ON dea.location = vax.location
+	AND dea.date = vax.date
+WHERE dea.continent IS NOT NULL
+ORDER BY location, date
+
+--Using CTE to perform calculation on PARTITION BY in previous query
+
+WITH PopvsVax (continent, location, date, population, new_vaccinations, RollingPeopleVaxxed) AS
+(SELECT dea.continent, dea.location, dea.date, dea.population, vax.new_vaccinations,
+SUM(CONVERT(bigint,vax.new_vaccinations)) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaxxed
+FROM Portfolio..CovidDeaths dea
+JOIN Portfolio..CovidVax vax
+	ON dea.location = vax.location
+	AND dea.date = vax.date
+WHERE dea.continent IS NOT NULL)
+
+SELECT *, (RollingPeopleVaxxed/Population)*100 AS RollingPercentVaxxed
+FROM PopvsVax
+
+--Using temp table to perform calculation on PARTITION BY from previous query
+
+DROP TABLE IF EXISTS #PercentPopulationVaxxed
+CREATE TABLE #PercentPopulationVaxxed
+(
+continent nvarchar(255),
+location nvarchar(255),
+date datetime,
+population numeric,
+new_vaccinations numeric,
+RollingPeopleVaccinated numeric
+)
+INSERT INTO #PercentPopulationVaxxed
+SELECT dea.continent, dea.location, dea.date, dea.population, vax.new_vaccinations,
+SUM(CONVERT(bigint,vax.new_vaccinations)) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaccinated
+FROM Portfolio..CovidDeaths dea
+JOIN Portfolio..CovidVax vax
+	ON dea.location = vax.location
+	AND dea.date = vax.date
+
+SELECT *, (RollingPeopleVaccinated/Population)*100 AS RollingPercentVaxxed
+FROM #PercentPopulationVaxxed
+
+--Creating view to store data for later visualizations
+
+CREATE VIEW PercentPopulationVaxxed AS
+SELECT dea.continent, dea.location, dea.date, dea.population, vax.new_vaccinations,
+SUM(CONVERT(bigint,vax.new_vaccinations)) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) AS RollingPeopleVaxxed
+FROM Portfolio..CovidDeaths dea
+JOIN Portfolio..CovidVax vax
+	ON dea.location = vax.location
+	AND dea.date = vax.date
+WHERE dea.continent IS NOT NULL
