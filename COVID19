@@ -119,3 +119,9 @@ JOIN Portfolio..CovidVax vax
 	ON dea.location = vax.location
 	AND dea.date = vax.date
 WHERE dea.continent IS NOT NULL
+
+/* TABLEAU VISUALIZATION LINK
+
+https://public.tableau.com/app/profile/beccadaughtry/viz/CovidDashboard_16758917592780/Dashboard1
+
+*/
